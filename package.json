@@ -1,0 +1,13 @@
+{
+  "name": "allo-monorepo",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "npm run dev:web",
+    "dev:web": "npm run dev -w @allo/web",
+    "dev:api": "npm run dev -w @allo/api",
+    "build:web": "npm run build -w @allo/web",
+    "build:api": "npm run build -w @allo/api"
+  }
+}
+
