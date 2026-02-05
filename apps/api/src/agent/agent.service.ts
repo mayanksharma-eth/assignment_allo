@@ -10,9 +10,9 @@ export class AgentService {
     private readonly indicatorsService: IndicatorsService
   ) {}
 
-  analyze(request: AgentAnalyzeRequest) {
+  async analyze(request: AgentAnalyzeRequest) {
     const timeframe = request.timeframe ?? "1d";
-    const candles = this.marketDataService.getOhlcv({
+    const candles = await this.marketDataService.getOhlcv({
       symbol: request.symbol,
       timeframe,
       limit: request.limit ?? 120
@@ -102,4 +102,3 @@ export class AgentService {
     return `Current read is ${stance} with ${trend}; ${rsiPart} and ${volPart}.`;
   }
 }
-

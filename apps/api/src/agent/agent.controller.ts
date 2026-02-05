@@ -15,7 +15,7 @@ export class AgentController {
   constructor(private readonly agentService: AgentService) {}
 
   @Post("analyze")
-  analyze(@Body() body: AnalyzeBody) {
+  async analyze(@Body() body: AnalyzeBody) {
     const symbol = this.resolveSymbol(body.symbol, body.prompt);
     if (!symbol) {
       throw new BadRequestException("Provide a symbol or include it in prompt");
@@ -68,4 +68,3 @@ export class AgentController {
     return limit;
   }
 }
-

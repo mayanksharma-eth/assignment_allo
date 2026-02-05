@@ -11,7 +11,7 @@ export class IndicatorsController {
   ) {}
 
   @Get("snapshot")
-  getSnapshot(
+  async getSnapshot(
     @Query("symbol") symbol?: string,
     @Query("timeframe") timeframe?: string,
     @Query("limit") limit?: string
@@ -20,7 +20,7 @@ export class IndicatorsController {
       throw new BadRequestException("symbol query param is required");
     }
 
-    const candles = this.marketDataService.getOhlcv({
+    const candles = await this.marketDataService.getOhlcv({
       symbol,
       timeframe: this.parseTimeframe(timeframe),
       limit: this.parseLimit(limit)
@@ -54,4 +54,3 @@ export class IndicatorsController {
     return parsed;
   }
 }
-

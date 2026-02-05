@@ -7,7 +7,7 @@ export class MarketDataController {
   constructor(private readonly marketDataService: MarketDataService) {}
 
   @Get("ohlcv")
-  getOhlcv(
+  async getOhlcv(
     @Query("symbol") symbol?: string,
     @Query("timeframe") timeframe?: string,
     @Query("limit") limit?: string
@@ -48,4 +48,3 @@ export class MarketDataController {
     return parsed;
   }
 }
-

@@ -18,3 +18,6 @@ Frontend runs on `http://localhost:3000`.
 
 Backend (when started) runs on `http://localhost:4000`.
 
+## Backend env
+
+Create `apps/api/.env` (or copy from `apps/api/.env.example`) with your Twelve Data key.

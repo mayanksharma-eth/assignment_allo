@@ -47,5 +47,15 @@ export class CacheService {
     this.set(key, value, ttlMs);
     return value;
   }
-}
 
+  async rememberAsync<T>(key: string, ttlMs: number, compute: () => Promise<T>): Promise<T> {
+    const cached = this.get<T>(key);
+    if (cached !== null) {
+      return cached;
+    }
+
+    const value = await compute();
+    this.set(key, value, ttlMs);
+    return value;
+  }
+}
