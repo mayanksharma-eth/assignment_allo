@@ -2,6 +2,87 @@
 
 import { useMemo, useState } from "react";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+const DEFAULT_TIMEFRAME = "1d";
+const DEFAULT_LIMIT = 120;
+
+function buildUrl(path, params) {
+  const url = new URL(path, API_BASE_URL);
+  Object.entries(params ?? {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") {
+      return;
+    }
+
+    url.searchParams.set(key, String(value));
+  });
+  return url.toString();
+}
+
+async function requestJson(path, options = {}) {
+  const { method = "GET", body, params } = options;
+
+  const response = await fetch(buildUrl(path, params), {
+    method,
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+
+  const contentType = response.headers.get("content-type") ?? "";
+  const payload = contentType.includes("application/json") ? await response.json() : null;
+
+  if (!response.ok) {
+    throw new Error(payload?.message ?? `Request failed (${response.status})`);
+  }
+
+  if (payload?.status === "error") {
+    throw new Error(payload.message ?? "Backend request failed");
+  }
+
+  return payload;
+}
+
+const backendApi = {
+  analyze: (data) =>
+    requestJson("/agent/analyze", {
+      method: "POST",
+      body: data
+    }),
+  snapshot: (params) =>
+    requestJson("/indicators/snapshot", {
+      params
+    }),
+  ohlcv: (params) =>
+    requestJson("/market-data/ohlcv", {
+      params
+    })
+};
+
+function extractSymbol(text) {
+  const match = text.toUpperCase().match(/\b[A-Z]{1,5}\b/);
+  return match ? match[0] : null;
+}
+
+function numberFormat(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "—";
+  }
+
+  return Number(value).toLocaleString(undefined, {
+    maximumFractionDigits: 2
+  });
+}
+
+function toPercent(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "—";
+  }
+
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${Number(value).toFixed(2)}%`;
+}
+
 function Icon({ children, size = 18 }) {
   return (
     <span aria-hidden="true" style={{ width: size, height: size, display: "grid", placeItems: "center" }}>
@@ -120,7 +201,7 @@ function Sidebar({ onNewChat, onPickHistory }) {
         <button
           className="nav__item nav__item--button"
           type="button"
-          onClick={() => setHistoryOpen((v) => !v)}
+          onClick={() => setHistoryOpen((value) => !value)}
         >
           <span className="nav__icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="18" height="18">
@@ -148,18 +229,18 @@ function Sidebar({ onNewChat, onPickHistory }) {
               />
             </svg>
           </span>
-          History <span className="chev" aria-hidden="true">{historyOpen ? "▾" : "▸"}</span>
+          History <span className="chev">{historyOpen ? "▾" : "▸"}</span>
         </button>
 
         <div className="history" hidden={!historyOpen}>
-          <button className="history__item" type="button" onClick={() => onPickHistory("whats going on with cop...")}>
-            whats going on with cop...
+          <button className="history__item" type="button" onClick={() => onPickHistory("Analyze AAPL for today")}>
+            Analyze AAPL for today
           </button>
-          <button className="history__item" type="button" onClick={() => onPickHistory("BTC analysis today")}>
-            BTC analysis today
+          <button className="history__item" type="button" onClick={() => onPickHistory("Snapshot for TSLA")}>
+            Snapshot for TSLA
           </button>
-          <button className="history__item" type="button" onClick={() => onPickHistory("ETH price prediction")}>
-            ETH price prediction
+          <button className="history__item" type="button" onClick={() => onPickHistory("Load OHLCV for NVDA")}>
+            Load OHLCV for NVDA
           </button>
         </div>
       </nav>
@@ -192,10 +273,10 @@ function Sidebar({ onNewChat, onPickHistory }) {
   );
 }
 
-function Topbar() {
+function Topbar({ symbol }) {
   return (
     <header className="topbar">
-      <div className="topbar__spacer" />
+      <div className="topbar__symbol">{symbol ? `${symbol} dashboard` : "Allo dashboard"}</div>
       <button className="shareBtn" type="button">
         <Icon>
           <path
@@ -241,9 +322,9 @@ function EmptyState({ prompts, onRefresh, onPickPrompt }) {
         </button>
 
         <div className="promptGrid">
-          {prompts.map((p) => (
-            <button key={p} className="promptCard" type="button" onClick={() => onPickPrompt(p)}>
-              • {p}
+          {prompts.map((prompt) => (
+            <button key={prompt} className="promptCard" type="button" onClick={() => onPickPrompt(prompt)}>
+              • {prompt}
             </button>
           ))}
         </div>
@@ -252,59 +333,250 @@ function EmptyState({ prompts, onRefresh, onPickPrompt }) {
   );
 }
 
-function Thread({ messages }) {
+function PriceChart({ candles }) {
+  if (!candles.length) {
+    return <div className="chartEmpty">No OHLCV data loaded yet.</div>;
+  }
+
+  const width = 760;
+  const height = 240;
+  const padding = 24;
+  const highs = candles.map((item) => item.high);
+  const lows = candles.map((item) => item.low);
+  const closes = candles.map((item) => item.close);
+  const min = Math.min(...lows);
+  const max = Math.max(...highs);
+  const diff = max - min || 1;
+  const xStep = (width - padding * 2) / Math.max(candles.length - 1, 1);
+  const toY = (value) => height - padding - ((value - min) / diff) * (height - padding * 2);
+  const points = closes.map((value, index) => `${padding + index * xStep},${toY(value)}`).join(" ");
+  const first = closes[0];
+  const last = closes[closes.length - 1];
+  const move = ((last - first) / first) * 100;
+
   return (
-    <div className={`thread ${messages.length ? "thread--visible" : ""}`} aria-live="polite">
-      {messages.map((m, idx) => (
-        <div key={idx} className={`msg msg--${m.kind}`}>
-          <div className="msg__bubble">{m.text}</div>
-        </div>
-      ))}
+    <div className="chartWrap">
+      <svg className="priceChart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+        <line x1={padding} y1={padding} x2={padding} y2={height - padding} className="chartAxis" />
+        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} className="chartAxis" />
+        <polyline points={points} className="chartLine" />
+      </svg>
+      <div className="chartMeta">
+        <span>{candles.length} candles</span>
+        <span>Low {numberFormat(min)}</span>
+        <span>High {numberFormat(max)}</span>
+        <span className={move >= 0 ? "positive" : "negative"}>{toPercent(move)}</span>
+      </div>
     </div>
   );
 }
 
-function Composer({ value, onChange, onSend }) {
+function Thread({ messages, analysis, snapshot, candles, loadingAction, error, onRefreshAll }) {
+  return (
+    <div className={`thread ${messages.length ? "thread--visible" : ""}`} aria-live="polite">
+      {messages.map((message, index) => (
+        <div key={`${message.kind}-${index}`} className={`msg msg--${message.kind}`}>
+          <div className="msg__bubble">{message.text}</div>
+        </div>
+      ))}
+
+      {loadingAction ? (
+        <div className="statusCard">Running `{loadingAction}` endpoint...</div>
+      ) : null}
+
+      {error ? <div className="statusCard statusCard--error">{error}</div> : null}
+
+      {analysis ? (
+        <section className="insights">
+          <div className="cardGrid">
+            <article className="dataCard">
+              <div className="dataCard__head">
+                <h3>Analysis</h3>
+                <span className="badge">{analysis.symbol}</span>
+              </div>
+              <p className="summaryText">{analysis.summary}</p>
+              <div className="metricGrid">
+                <div className="metric">
+                  <span>Stance</span>
+                  <strong>{analysis.stance}</strong>
+                </div>
+                <div className="metric">
+                  <span>Confidence</span>
+                  <strong>{analysis.confidence}%</strong>
+                </div>
+                <div className="metric">
+                  <span>Timeframe</span>
+                  <strong>{analysis.timeframe}</strong>
+                </div>
+                <div className="metric">
+                  <span>Latest close</span>
+                  <strong>{numberFormat(analysis.indicators?.latestClose)}</strong>
+                </div>
+              </div>
+            </article>
+
+            <article className="dataCard">
+              <div className="dataCard__head">
+                <h3>Snapshot</h3>
+                <button className="miniBtn" type="button" onClick={onRefreshAll} disabled={Boolean(loadingAction)}>
+                  Refresh all APIs
+                </button>
+              </div>
+              <div className="metricGrid">
+                <div className="metric">
+                  <span>Change</span>
+                  <strong className={snapshot?.changePercent >= 0 ? "positive" : "negative"}>
+                    {toPercent(snapshot?.changePercent)}
+                  </strong>
+                </div>
+                <div className="metric">
+                  <span>SMA20</span>
+                  <strong>{numberFormat(snapshot?.sma20)}</strong>
+                </div>
+                <div className="metric">
+                  <span>EMA20</span>
+                  <strong>{numberFormat(snapshot?.ema20)}</strong>
+                </div>
+                <div className="metric">
+                  <span>RSI14</span>
+                  <strong>{numberFormat(snapshot?.rsi14)}</strong>
+                </div>
+                <div className="metric">
+                  <span>Volatility</span>
+                  <strong>{toPercent(snapshot?.volatility20)}</strong>
+                </div>
+                <div className="metric">
+                  <span>Trend</span>
+                  <strong>{snapshot?.trend ?? "—"}</strong>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <article className="dataCard dataCard--wide">
+            <div className="dataCard__head">
+              <h3>OHLCV Chart</h3>
+              <span className="mutedText">GET /market-data/ohlcv</span>
+            </div>
+            <PriceChart candles={candles} />
+          </article>
+
+          <article className="dataCard dataCard--wide">
+            <div className="dataCard__head">
+              <h3>Latest candles</h3>
+              <span className="mutedText">{candles.length} rows</span>
+            </div>
+            <div className="candleList">
+              {candles
+                .slice(-6)
+                .reverse()
+                .map((candle) => (
+                  <div className="candleRow" key={candle.timestamp}>
+                    <span>{candle.timestamp.slice(0, 10)}</span>
+                    <span>O {numberFormat(candle.open)}</span>
+                    <span>H {numberFormat(candle.high)}</span>
+                    <span>L {numberFormat(candle.low)}</span>
+                    <span>C {numberFormat(candle.close)}</span>
+                    <span>V {Number(candle.volume).toLocaleString()}</span>
+                  </div>
+                ))}
+            </div>
+          </article>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function Composer({
+  value,
+  timeframe,
+  limit,
+  busy,
+  onChange,
+  onTimeframeChange,
+  onLimitChange,
+  onAnalyze,
+  onSnapshot,
+  onOhlcv
+}) {
   return (
     <footer className="composer">
-      <div className="composer__inner">
-        <button className="clipBtn" type="button" aria-label="Attach">
-          <Icon>
-            <path
-              d="M8 12.5 14.8 5.7a3 3 0 0 1 4.2 4.2L11 18a5 5 0 0 1-7.1-7.1L12 2.8"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+      <div className="composer__inner composer__inner--stacked">
+        <div className="composer__tools">
+          <button className="toolBtn" type="button" onClick={onAnalyze} disabled={busy}>
+            Analyze
+          </button>
+          <button className="toolBtn" type="button" onClick={onSnapshot} disabled={busy}>
+            Snapshot
+          </button>
+          <button className="toolBtn" type="button" onClick={onOhlcv} disabled={busy}>
+            OHLCV
+          </button>
+
+          <label className="toolField">
+            TF
+            <select value={timeframe} onChange={(event) => onTimeframeChange(event.target.value)} disabled={busy}>
+              <option value="1h">1h</option>
+              <option value="4h">4h</option>
+              <option value="1d">1d</option>
+            </select>
+          </label>
+
+          <label className="toolField">
+            Limit
+            <input
+              type="number"
+              min="20"
+              max="500"
+              value={limit}
+              onChange={(event) => onLimitChange(event.target.value)}
+              disabled={busy}
             />
-          </Icon>
-        </button>
-        <input
-          className="composer__input"
-          type="text"
-          placeholder="Ask about crypto, DeFi, markets..."
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              onSend();
-            }
-          }}
-        />
-        <button className="sendBtn" type="button" aria-label="Send" onClick={onSend}>
-          <Icon>
-            <path
-              d="M12 5v14M12 5l-6 6M12 5l6 6"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </Icon>
-        </button>
+          </label>
+        </div>
+
+        <div className="composer__row">
+          <button className="clipBtn" type="button" aria-label="Attach">
+            <Icon>
+              <path
+                d="M8 12.5 14.8 5.7a3 3 0 0 1 4.2 4.2L11 18a5 5 0 0 1-7.1-7.1L12 2.8"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </Icon>
+          </button>
+
+          <input
+            className="composer__input"
+            type="text"
+            placeholder="Try: analyze AAPL, snapshot TSLA, chart NVDA..."
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                onAnalyze();
+              }
+            }}
+          />
+
+          <button className="sendBtn" type="button" aria-label="Send" onClick={onAnalyze} disabled={busy}>
+            <Icon>
+              <path
+                d="M12 5v14M12 5l-6 6M12 5l6 6"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </Icon>
+          </button>
+        </div>
       </div>
     </footer>
   );
@@ -314,72 +586,237 @@ export default function HomePage() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([]);
   const [promptSeed, setPromptSeed] = useState(0);
+  const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME);
+  const [limit, setLimit] = useState(String(DEFAULT_LIMIT));
+  const [analysis, setAnalysis] = useState(null);
+  const [snapshot, setSnapshot] = useState(null);
+  const [candles, setCandles] = useState([]);
+  const [activeSymbol, setActiveSymbol] = useState("AAPL");
+  const [loadingAction, setLoadingAction] = useState("");
+  const [error, setError] = useState("");
 
   const prompts = useMemo(() => {
     const base = [
-      "whats going on with copper",
-      "what about GDXU",
-      "rsi is quite low so will it bounce back or not",
-      "what about URAA",
-      "what about copper - compare all of them in table format",
-      "add in palladium and uuuu"
+      "Analyze AAPL and suggest entries",
+      "Snapshot for TSLA on 1d",
+      "Load OHLCV chart for NVDA",
+      "Analyze MSFT for trend and risk",
+      "Check RSI and volatility for AMZN",
+      "Analyze META with bullish/bearish view"
     ];
 
-    const arr = base.slice();
-    let t = promptSeed + 7;
-    for (let i = arr.length - 1; i > 0; i--) {
-      t = (t * 9301 + 49297) % 233280;
-      const j = Math.floor((t / 233280) * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
+    const items = base.slice();
+    let seed = promptSeed + 13;
+    for (let i = items.length - 1; i > 0; i -= 1) {
+      seed = (seed * 9301 + 49297) % 233280;
+      const j = Math.floor((seed / 233280) * (i + 1));
+      [items[i], items[j]] = [items[j], items[i]];
     }
-    return arr;
+
+    return items;
   }, [promptSeed]);
 
-  function push(kind, text) {
-    setMessages((m) => m.concat({ kind, text }));
+  function pushMessage(kind, text) {
+    setMessages((current) => current.concat({ kind, text }));
   }
 
-  function send(text) {
-    const trimmed = (text ?? input).trim();
-    if (!trimmed) return;
+  function parseLimit() {
+    const parsed = Number.parseInt(limit, 10);
+    if (Number.isNaN(parsed)) {
+      return DEFAULT_LIMIT;
+    }
 
+    return Math.min(500, Math.max(20, parsed));
+  }
+
+  function resolveSymbol(text) {
+    return extractSymbol(text) ?? activeSymbol;
+  }
+
+  async function loadAllForSymbol(symbol, prompt) {
+    const numericLimit = parseLimit();
+    const analyzeResponse = await backendApi.analyze({
+      symbol,
+      timeframe,
+      limit: numericLimit,
+      prompt
+    });
+
+    const targetSymbol = analyzeResponse.symbol ?? symbol;
+    const [snapshotResponse, ohlcvResponse] = await Promise.all([
+      backendApi.snapshot({
+        symbol: targetSymbol,
+        timeframe,
+        limit: numericLimit
+      }),
+      backendApi.ohlcv({
+        symbol: targetSymbol,
+        timeframe,
+        limit: numericLimit
+      })
+    ]);
+
+    setAnalysis(analyzeResponse);
+    setSnapshot(snapshotResponse);
+    setCandles(Array.isArray(ohlcvResponse) ? ohlcvResponse : []);
+    setActiveSymbol(targetSymbol);
+    return analyzeResponse;
+  }
+
+  async function runAnalyze() {
+    const prompt = input.trim();
+    if (!prompt) {
+      return;
+    }
+
+    const symbol = resolveSymbol(prompt);
+    if (!symbol) {
+      setError("Add a ticker symbol like AAPL or TSLA in your prompt.");
+      return;
+    }
+
+    setError("");
+    setLoadingAction("analyze");
     setInput("");
-    push("user", trimmed);
+    pushMessage("user", prompt);
 
-    window.setTimeout(() => {
-      push(
-        "bot",
-        "Demo mode: I can outline themes/risks, but this is only a basic assignment layout (not financial advice)."
-      );
-    }, 420);
+    try {
+      const result = await loadAllForSymbol(symbol, prompt);
+      pushMessage("bot", result.summary);
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : "Could not complete analyze request";
+      setError(message);
+      pushMessage("bot", `Request failed: ${message}`);
+    } finally {
+      setLoadingAction("");
+    }
+  }
+
+  async function runSnapshotOnly() {
+    const symbol = resolveSymbol(input.trim());
+    if (!symbol) {
+      setError("Add a ticker symbol before loading snapshot.");
+      return;
+    }
+
+    setError("");
+    setLoadingAction("snapshot");
+
+    try {
+      const response = await backendApi.snapshot({
+        symbol,
+        timeframe,
+        limit: parseLimit()
+      });
+      setSnapshot(response);
+      setActiveSymbol(symbol);
+      pushMessage("bot", `Snapshot updated for ${symbol}.`);
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : "Could not load snapshot";
+      setError(message);
+      pushMessage("bot", `Snapshot failed: ${message}`);
+    } finally {
+      setLoadingAction("");
+    }
+  }
+
+  async function runOhlcvOnly() {
+    const symbol = resolveSymbol(input.trim());
+    if (!symbol) {
+      setError("Add a ticker symbol before loading OHLCV.");
+      return;
+    }
+
+    setError("");
+    setLoadingAction("ohlcv");
+
+    try {
+      const response = await backendApi.ohlcv({
+        symbol,
+        timeframe,
+        limit: parseLimit()
+      });
+      setCandles(Array.isArray(response) ? response : []);
+      setActiveSymbol(symbol);
+      pushMessage("bot", `OHLCV chart data updated for ${symbol}.`);
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : "Could not load OHLCV";
+      setError(message);
+      pushMessage("bot", `OHLCV failed: ${message}`);
+    } finally {
+      setLoadingAction("");
+    }
+  }
+
+  async function refreshAllData() {
+    if (!activeSymbol) {
+      return;
+    }
+
+    setError("");
+    setLoadingAction("refresh");
+
+    try {
+      await loadAllForSymbol(activeSymbol, `refresh ${activeSymbol}`);
+      pushMessage("bot", `All endpoints refreshed for ${activeSymbol}.`);
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : "Could not refresh data";
+      setError(message);
+      pushMessage("bot", `Refresh failed: ${message}`);
+    } finally {
+      setLoadingAction("");
+    }
+  }
+
+  function resetChat() {
+    setMessages([]);
+    setInput("");
+    setError("");
+    setAnalysis(null);
+    setSnapshot(null);
+    setCandles([]);
+    setActiveSymbol("AAPL");
   }
 
   return (
     <div className="app">
-      <Sidebar
-        onNewChat={() => {
-          setMessages([]);
-          setInput("");
-        }}
-        onPickHistory={(t) => setInput(t)}
-      />
+      <Sidebar onNewChat={resetChat} onPickHistory={(text) => setInput(text)} />
 
       <main className="main">
-        <Topbar />
+        <Topbar symbol={analysis?.symbol ?? activeSymbol} />
 
         <section className="content">
           {messages.length === 0 ? (
             <EmptyState
               prompts={prompts}
-              onRefresh={() => setPromptSeed((s) => s + 1)}
-              onPickPrompt={(p) => setInput(p)}
+              onRefresh={() => setPromptSeed((value) => value + 1)}
+              onPickPrompt={(prompt) => setInput(prompt)}
             />
           ) : (
-            <Thread messages={messages} />
+            <Thread
+              messages={messages}
+              analysis={analysis}
+              snapshot={snapshot}
+              candles={candles}
+              loadingAction={loadingAction}
+              error={error}
+              onRefreshAll={refreshAllData}
+            />
           )}
         </section>
 
-        <Composer value={input} onChange={setInput} onSend={() => send()} />
+        <Composer
+          value={input}
+          timeframe={timeframe}
+          limit={limit}
+          busy={Boolean(loadingAction)}
+          onChange={setInput}
+          onTimeframeChange={setTimeframe}
+          onLimitChange={setLimit}
+          onAnalyze={runAnalyze}
+          onSnapshot={runSnapshotOnly}
+          onOhlcv={runOhlcvOnly}
+        />
       </main>
     </div>
   );
