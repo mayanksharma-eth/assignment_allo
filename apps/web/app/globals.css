@@ -107,6 +107,15 @@ body.theme-dark .history__item:hover {
   background: rgba(255, 255, 255, 0.06);
 }
 
+body.theme-dark .sidebar__icons,
+body.theme-dark .iconBtn,
+body.theme-dark .nav__icon,
+body.theme-dark .brand__mark,
+body.theme-dark .newChat__icon,
+body.theme-dark .squareBtn {
+  color: #cbd5e1;
+}
+
 .newChat {
   margin: 8px 14px 14px;
   height: 42px;
@@ -400,9 +409,6 @@ body.theme-dark .chartCross {
   stroke: #3b465a;
 }
 
-body.theme-dark .chartDot {
-  stroke: #0e1116;
-}
 
 body.theme-dark .chartHover {
   background: rgba(18, 24, 38, 0.82);
@@ -804,6 +810,8 @@ body.theme-dark .statusCard--error {
   display: block;
   background: linear-gradient(180deg, #fff, #fffaf7);
   border-radius: 10px;
+  background-size: 200% 200%;
+  animation: chartGlow 8s ease infinite;
 }
 
 .chartAxis {
@@ -814,9 +822,22 @@ body.theme-dark .statusCard--error {
 .chartLine {
   fill: none;
   stroke: var(--accent);
-  stroke-width: 2.2;
+  stroke-width: 2.4;
   stroke-linejoin: round;
   stroke-linecap: round;
+  stroke-dasharray: 4000;
+  stroke-dashoffset: 0;
+  animation: drawLine 1.6s ease-out both;
+}
+
+.chartLine--glow {
+  stroke-width: 6;
+  opacity: 0.22;
+  filter: blur(1.4px);
+}
+
+.chartLine--main {
+  animation-delay: 0.08s;
 }
 
 .chartCross {
@@ -825,11 +846,6 @@ body.theme-dark .statusCard--error {
   stroke-dasharray: 4 6;
 }
 
-.chartDot {
-  fill: var(--accent);
-  stroke: #fff;
-  stroke-width: 1.5;
-}
 
 .chartHit {
   fill: transparent;
@@ -857,6 +873,33 @@ body.theme-dark .statusCard--error {
   font-size: 12px;
   color: #4f4f4f;
   backdrop-filter: blur(4px);
+}
+
+@keyframes drawLine {
+  from {
+    stroke-dashoffset: 4000;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+
+@keyframes chartGlow {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .priceChart,
+  .chartLine {
+    animation: none;
+  }
 }
 
 .chartEmpty {

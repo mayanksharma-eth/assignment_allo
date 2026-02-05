@@ -404,9 +404,9 @@ function PriceChart({ candles }) {
       <svg className="priceChart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
         <line x1={padding} y1={padding} x2={padding} y2={height - padding} className="chartAxis" />
         <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} className="chartAxis" />
-        <polyline points={points} className="chartLine" />
+        <polyline points={points} className="chartLine chartLine--glow" />
+        <polyline points={points} className="chartLine chartLine--main" />
         {hoverIndex !== null && <line x1={activeX} y1={padding} x2={activeX} y2={height - padding} className="chartCross" />}
-        <circle cx={activeX} cy={activeY} r="4" className="chartDot" />
         <rect
           x={padding}
           y={padding}
