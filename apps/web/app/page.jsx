@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 const DEFAULT_TIMEFRAME = "1d";
 const DEFAULT_LIMIT = 120;
+const SYMBOL_STOPWORDS = new Set(["RSI", "EMA", "SMA", "MACD", "OHLCV", "VWAP", "ATR", "ADX", "ROC"]);
 
 function buildUrl(path, params) {
   const url = new URL(path, API_BASE_URL);
@@ -60,8 +61,32 @@ const backendApi = {
 };
 
 function extractSymbol(text) {
-  const match = text.toUpperCase().match(/\b[A-Z]{1,5}\b/);
-  return match ? match[0] : null;
+  if (!text) {
+    return null;
+  }
+
+  const dollarMatch = text.match(/\$([A-Za-z]{1,5})\b/);
+  if (dollarMatch) {
+    return dollarMatch[1].toUpperCase();
+  }
+
+  const tokens = Array.from(text.matchAll(/\b[A-Z]{1,5}\b/g)).map((match) => match[0]);
+  const filtered = tokens.filter((token) => !SYMBOL_STOPWORDS.has(token));
+  if (filtered.length) {
+    return filtered[filtered.length - 1];
+  }
+
+  if (tokens.length) {
+    return tokens[tokens.length - 1];
+  }
+
+  const wordMatch = text.match(/\b(?:for|of|on|about)\s+([A-Za-z]{1,5})\b/i);
+  if (wordMatch) {
+    const candidate = wordMatch[1].toUpperCase();
+    return SYMBOL_STOPWORDS.has(candidate) ? null : candidate;
+  }
+
+  return null;
 }
 
 function numberFormat(value) {
@@ -93,7 +118,7 @@ function Icon({ children, size = 18 }) {
   );
 }
 
-function Sidebar({ onNewChat, onPickHistory }) {
+function Sidebar({ onNewChat, onPickHistory, theme, onToggleTheme }) {
   const [historyOpen, setHistoryOpen] = useState(true);
 
   return (
@@ -114,7 +139,13 @@ function Sidebar({ onNewChat, onPickHistory }) {
           <span className="brand__name">Allo</span>
         </div>
         <div className="sidebar__icons" aria-hidden="true">
-          <button className="iconBtn" title="Theme" type="button">
+          <button
+            className="iconBtn"
+            title={theme === "dark" ? "Day mode" : "Night mode"}
+            type="button"
+            onClick={onToggleTheme}
+            aria-pressed={theme === "dark"}
+          >
             <svg viewBox="0 0 24 24" width="18" height="18">
               <path
                 d="M21 14.5A8.5 8.5 0 0 1 9.5 3a7 7 0 1 0 11.5 11.5Z"
@@ -334,6 +365,8 @@ function EmptyState({ prompts, onRefresh, onPickPrompt }) {
 }
 
 function PriceChart({ candles }) {
+  const [hoverIndex, setHoverIndex] = useState(null);
+
   if (!candles.length) {
     return <div className="chartEmpty">No OHLCV data loaded yet.</div>;
   }
@@ -353,13 +386,41 @@ function PriceChart({ candles }) {
   const first = closes[0];
   const last = closes[closes.length - 1];
   const move = ((last - first) / first) * 100;
+  const activeIndex = hoverIndex ?? closes.length - 1;
+  const activeCandle = candles[activeIndex];
+  const activeX = padding + activeIndex * xStep;
+  const activeY = toY(closes[activeIndex]);
 
   return (
     <div className="chartWrap">
+      <div className="chartHover">
+        <span>{activeCandle.timestamp.slice(0, 10)}</span>
+        <span>O {numberFormat(activeCandle.open)}</span>
+        <span>H {numberFormat(activeCandle.high)}</span>
+        <span>L {numberFormat(activeCandle.low)}</span>
+        <span>C {numberFormat(activeCandle.close)}</span>
+      </div>
+
       <svg className="priceChart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
         <line x1={padding} y1={padding} x2={padding} y2={height - padding} className="chartAxis" />
         <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} className="chartAxis" />
         <polyline points={points} className="chartLine" />
+        {hoverIndex !== null && <line x1={activeX} y1={padding} x2={activeX} y2={height - padding} className="chartCross" />}
+        <circle cx={activeX} cy={activeY} r="4" className="chartDot" />
+        <rect
+          x={padding}
+          y={padding}
+          width={width - padding * 2}
+          height={height - padding * 2}
+          className="chartHit"
+          onMouseMove={(event) => {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            const ratio = (event.clientX - bounds.left) / bounds.width;
+            const index = Math.max(0, Math.min(candles.length - 1, Math.round(ratio * (candles.length - 1))));
+            setHoverIndex(index);
+          }}
+          onMouseLeave={() => setHoverIndex(null)}
+        />
       </svg>
       <div className="chartMeta">
         <span>{candles.length} candles</span>
@@ -594,6 +655,31 @@ export default function HomePage() {
   const [activeSymbol, setActiveSymbol] = useState("AAPL");
   const [loadingAction, setLoadingAction] = useState("");
   const [error, setError] = useState("");
+  const [theme, setTheme] = useState("light");
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const stored = window.localStorage.getItem("allo-theme");
+    if (stored === "light" || stored === "dark") {
+      setTheme(stored);
+      return;
+    }
+
+    const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+    setTheme(prefersDark ? "dark" : "light");
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    document.body.classList.toggle("theme-dark", theme === "dark");
+    window.localStorage.setItem("allo-theme", theme);
+  }, [theme]);
 
   const prompts = useMemo(() => {
     const base = [
@@ -780,7 +866,12 @@ export default function HomePage() {
 
   return (
     <div className="app">
-      <Sidebar onNewChat={resetChat} onPickHistory={(text) => setInput(text)} />
+      <Sidebar
+        onNewChat={resetChat}
+        onPickHistory={(text) => setInput(text)}
+        theme={theme}
+        onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+      />
 
       <main className="main">
         <Topbar symbol={analysis?.symbol ?? activeSymbol} />
@@ -821,4 +912,3 @@ export default function HomePage() {
     </div>
   );
 }
-

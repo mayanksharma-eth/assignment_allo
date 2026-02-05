@@ -10,6 +10,8 @@ type AnalyzeBody = {
   prompt?: string;
 };
 
+const SYMBOL_STOPWORDS = new Set(["RSI", "EMA", "SMA", "MACD", "OHLCV", "VWAP", "ATR", "ADX", "ROC"]);
+
 @Controller("agent")
 export class AgentController {
   constructor(private readonly agentService: AgentService) {}
@@ -40,8 +42,28 @@ export class AgentController {
       return null;
     }
 
-    const match = prompt.match(/\b[A-Z]{1,5}\b/);
-    return match ? match[0] : null;
+    const dollarMatch = prompt.match(/\$([A-Za-z]{1,5})\b/);
+    if (dollarMatch) {
+      return dollarMatch[1].toUpperCase();
+    }
+
+    const tokens = Array.from(prompt.matchAll(/\b[A-Z]{1,5}\b/g)).map((match) => match[0]);
+    const filtered = tokens.filter((token) => !SYMBOL_STOPWORDS.has(token));
+    if (filtered.length) {
+      return filtered[filtered.length - 1];
+    }
+
+    if (tokens.length) {
+      return tokens[tokens.length - 1];
+    }
+
+    const wordMatch = prompt.match(/\b(?:for|of|on|about)\s+([A-Za-z]{1,5})\b/i);
+    if (wordMatch) {
+      const candidate = wordMatch[1].toUpperCase();
+      return SYMBOL_STOPWORDS.has(candidate) ? null : candidate;
+    }
+
+    return null;
   }
 
   private parseTimeframe(timeframe?: string): Timeframe | undefined {

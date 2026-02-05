@@ -20,4 +20,6 @@ Backend (when started) runs on `http://localhost:4000`.
 
 ## Backend env
 
-Create `apps/api/.env` (or copy from `apps/api/.env.example`) with your Twelve Data key.
+Create `apps/api/.env` (or copy from `apps/api/.env.example`) with:
+- Twelve Data key (primary provider)
+- Alpha Vantage key (fallback provider)

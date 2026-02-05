@@ -89,6 +89,24 @@ body {
   background: rgba(0, 0, 0, 0.04);
 }
 
+body.theme-dark {
+  --bg: #0e1116;
+  --panel: #131824;
+  --panel-2: #1a2231;
+  --text: #f4f5f7;
+  --muted: #aeb4bf;
+  --line: #242c3a;
+  --accent: #d08a5c;
+  --accent-2: #243042;
+  --shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+body.theme-dark .iconBtn:hover,
+body.theme-dark .nav__item:hover,
+body.theme-dark .history__item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .newChat {
   margin: 8px 14px 14px;
   height: 42px;
@@ -303,6 +321,101 @@ body {
   background: #fcfcfc;
 }
 
+body.theme-dark .shareBtn,
+body.theme-dark .ghostBtn,
+body.theme-dark .squareBtn,
+body.theme-dark .promptCard,
+body.theme-dark .msg__bubble,
+body.theme-dark .composer__inner,
+body.theme-dark .toolBtn,
+body.theme-dark .toolField,
+body.theme-dark .statusCard,
+body.theme-dark .dataCard,
+body.theme-dark .metric,
+body.theme-dark .chartEmpty,
+body.theme-dark .candleRow {
+  background: #151b26;
+  border-color: #2b3445;
+  color: var(--text);
+}
+
+body.theme-dark .shareBtn:hover,
+body.theme-dark .ghostBtn:hover,
+body.theme-dark .squareBtn:hover,
+body.theme-dark .toolBtn:hover,
+body.theme-dark .miniBtn:hover {
+  background: #1b2432;
+}
+
+body.theme-dark .promptCard:hover {
+  border-color: #384255;
+}
+
+body.theme-dark .topbar__symbol,
+body.theme-dark .mutedText,
+body.theme-dark .metric span,
+body.theme-dark .chartMeta,
+body.theme-dark .history__item,
+body.theme-dark .nav__item,
+body.theme-dark .profile__tag,
+body.theme-dark .composer__input::placeholder {
+  color: var(--muted);
+}
+
+body.theme-dark .composer__input {
+  background: transparent;
+  color: var(--text);
+}
+
+body.theme-dark .summaryText,
+body.theme-dark .metric strong,
+body.theme-dark .candleRow {
+  color: var(--text);
+}
+
+body.theme-dark .composer {
+  background: linear-gradient(to top, #0e1116 60%, rgba(14, 17, 22, 0));
+}
+
+body.theme-dark .sendBtn,
+body.theme-dark .clipBtn {
+  background: #1b2432;
+  color: var(--text);
+}
+
+body.theme-dark .sendBtn:hover,
+body.theme-dark .clipBtn:hover {
+  background: #263246;
+}
+
+body.theme-dark .priceChart {
+  background: linear-gradient(180deg, #121826, #0f141f);
+}
+
+body.theme-dark .chartAxis {
+  stroke: #2e384a;
+}
+
+body.theme-dark .chartCross {
+  stroke: #3b465a;
+}
+
+body.theme-dark .chartDot {
+  stroke: #0e1116;
+}
+
+body.theme-dark .chartHover {
+  background: rgba(18, 24, 38, 0.82);
+  border-color: #2e384a;
+  color: var(--text);
+}
+
+body.theme-dark .statusCard--error {
+  border-color: #4b2a2a;
+  background: rgba(160, 60, 60, 0.18);
+  color: #f1baba;
+}
+
 .content {
   flex: 1;
   display: flex;
@@ -454,6 +567,7 @@ body {
 
 .composer__inner--stacked {
   height: auto;
+  flex-direction: column;
   align-items: stretch;
   gap: 8px;
   padding: 10px 12px 12px;
@@ -511,7 +625,7 @@ body {
 }
 
 .composer__row {
-  height: 42px;
+  height: 50px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -537,8 +651,11 @@ body {
   flex: 1;
   border: 0;
   outline: 0;
-  font-size: 15px;
+  font-size: 16px;
   color: #2a2a2a;
+  line-height: 1.4;
+  height: 42px;
+  padding-right: 8px;
 }
 
 .composer__input::placeholder {
@@ -555,6 +672,7 @@ body {
   cursor: pointer;
   display: grid;
   place-items: center;
+  margin-left: auto;
 }
 
 .sendBtn:hover {
@@ -677,6 +795,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  position: relative;
 }
 
 .priceChart {
@@ -700,12 +819,44 @@ body {
   stroke-linecap: round;
 }
 
+.chartCross {
+  stroke: #e3d3c7;
+  stroke-width: 1;
+  stroke-dasharray: 4 6;
+}
+
+.chartDot {
+  fill: var(--accent);
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.chartHit {
+  fill: transparent;
+  cursor: crosshair;
+}
+
 .chartMeta {
   display: flex;
   align-items: center;
   justify-content: space-between;
   color: #6e6e6e;
   font-size: 12px;
+}
+
+.chartHover {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  display: flex;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid #eadfd8;
+  font-size: 12px;
+  color: #4f4f4f;
+  backdrop-filter: blur(4px);
 }
 
 .chartEmpty {
