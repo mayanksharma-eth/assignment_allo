@@ -11,7 +11,8 @@ const COMPANY_SYMBOL_MAP: Record<string, string> = {
   FACEBOOK: "META",
   NETFLIX: "NFLX",
   GOOGLE: "GOOGL",
-  ALPHABET: "GOOGL"
+  ALPHABET: "GOOGL",
+  BITCOIN: "BTC"
 };
 
 type NlpIntent = {
@@ -290,7 +291,7 @@ export class NlpService {
           {
             role: "system",
             content:
-              "Extract intent from the user prompt. Return JSON only with keys: symbol, timeframe, limit, action, confidence. Map company names to tickers (Tesla->TSLA, Apple->AAPL, Microsoft->MSFT, Nvidia->NVDA, Amazon->AMZN, Meta/Facebook->META, Netflix->NFLX, Google/Alphabet->GOOGL). Timeframe must be 1h, 4h, or 1d or null. Action must be analyze, snapshot, ohlcv, or null."
+              "Extract intent from the user prompt. Return JSON only with keys: symbol, timeframe, limit, action, confidence. Map company names to tickers (Tesla->TSLA, Apple->AAPL, Microsoft->MSFT, Nvidia->NVDA, Amazon->AMZN, Meta/Facebook->META, Netflix->NFLX, Google/Alphabet->GOOGL). For crypto, return the pair in USD format (BTC/USD, ETH/USD, SOL/USD, DOGE/USD). If you infer another coin, still return TICKER/USD. Timeframe must be 1h, 4h, or 1d or null. Action must be analyze, snapshot, ohlcv, or null."
           },
           { role: "user", content: prompt }
         ]

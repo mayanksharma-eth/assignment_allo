@@ -16,7 +16,8 @@ const COMPANY_SYMBOL_MAP = {
   FACEBOOK: "META",
   NETFLIX: "NFLX",
   GOOGLE: "GOOGL",
-  ALPHABET: "GOOGL"
+  ALPHABET: "GOOGL",
+  BITCOIN: "BTC"
 };
 
 function buildUrl(path, params) {
@@ -75,6 +76,16 @@ const backendApi = {
 function extractSymbol(text) {
   if (!text) {
     return null;
+  }
+
+  const pairMatch = text.match(/\b([A-Z0-9]{2,10})\/(USD)\b/i);
+  if (pairMatch) {
+    return `${pairMatch[1].toUpperCase()}/${pairMatch[2].toUpperCase()}`;
+  }
+
+  const compactPair = text.match(/\b([A-Z0-9]{2,10})USD\b/i);
+  if (compactPair) {
+    return `${compactPair[1].toUpperCase()}/USD`;
   }
 
   const upperText = text.toUpperCase();
@@ -749,20 +760,28 @@ export default function HomePage() {
     return Math.min(500, Math.max(20, parsed));
   }
 
-  function resolveSymbol(text) {
-    return extractSymbol(text) ?? activeSymbol;
+  function resolveSymbol(text, allowFallback = false) {
+    const resolved = extractSymbol(text);
+    if (resolved) {
+      return resolved;
+    }
+
+    return allowFallback ? activeSymbol : null;
   }
 
   async function loadAllForSymbol(symbol, prompt) {
     const numericLimit = parseLimit();
     const analyzeResponse = await backendApi.analyze({
-      symbol,
+      symbol: symbol ?? undefined,
       timeframe,
       limit: numericLimit,
       prompt
     });
 
     const targetSymbol = analyzeResponse.symbol ?? symbol;
+    if (!targetSymbol) {
+      throw new Error("Symbol could not be resolved from prompt.");
+    }
     const [snapshotResponse, ohlcvResponse] = await Promise.all([
       backendApi.snapshot({
         symbol: targetSymbol,
@@ -789,11 +808,7 @@ export default function HomePage() {
       return;
     }
 
-    const symbol = resolveSymbol(prompt);
-    if (!symbol) {
-      setError("Add a ticker symbol like AAPL or TSLA in your prompt.");
-      return;
-    }
+    const symbol = resolveSymbol(prompt, false);
 
     setError("");
     setLoadingAction("analyze");
@@ -813,7 +828,7 @@ export default function HomePage() {
   }
 
   async function runSnapshotOnly() {
-    const symbol = resolveSymbol(input.trim());
+    const symbol = resolveSymbol(input.trim(), true);
     if (!symbol) {
       setError("Add a ticker symbol before loading snapshot.");
       return;
@@ -841,7 +856,7 @@ export default function HomePage() {
   }
 
   async function runOhlcvOnly() {
-    const symbol = resolveSymbol(input.trim());
+    const symbol = resolveSymbol(input.trim(), true);
     if (!symbol) {
       setError("Add a ticker symbol before loading OHLCV.");
       return;
