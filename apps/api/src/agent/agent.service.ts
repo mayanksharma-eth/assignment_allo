@@ -2,12 +2,14 @@ import { Injectable } from "@nestjs/common";
 import { IndicatorsService } from "../indicators/indicators.service";
 import { MarketDataService } from "../market-data/market-data.service";
 import { AgentAnalyzeRequest } from "./agent.types";
+import { NlpService } from "../nlp/nlp.service";
 
 @Injectable()
 export class AgentService {
   constructor(
     private readonly marketDataService: MarketDataService,
-    private readonly indicatorsService: IndicatorsService
+    private readonly indicatorsService: IndicatorsService,
+    private readonly nlpService: NlpService
   ) {}
 
   async analyze(request: AgentAnalyzeRequest) {
@@ -24,6 +26,16 @@ export class AgentService {
     const stance = this.getStance(snapshot.rsi14, snapshot.trend);
     const confidence = this.getConfidence(snapshot.rsi14, snapshot.volatility20, snapshot.trend);
 
+    const summaryResult = await this.nlpService.summarizeAnalysis({
+      prompt: request.prompt ?? "",
+      symbol: request.symbol.toUpperCase(),
+      timeframe,
+      latestCandle: lastCandle,
+      indicators: snapshot,
+      stance,
+      confidence
+    });
+
     return {
       symbol: request.symbol.toUpperCase(),
       timeframe,
@@ -32,7 +44,9 @@ export class AgentService {
       indicators: snapshot,
       stance,
       confidence,
-      summary: this.buildSummary(stance, snapshot.rsi14, snapshot.trend, snapshot.volatility20),
+      summary: null,
+      llmSummary: summaryResult?.text ?? null,
+      summarySource: summaryResult?.source ?? null,
       notFinancialAdvice: true
     };
   }
@@ -90,15 +104,4 @@ export class AgentService {
     return Math.max(10, Math.min(95, score));
   }
 
-  private buildSummary(
-    stance: "bullish" | "bearish" | "neutral",
-    rsi14: number | null,
-    trend: "uptrend" | "downtrend" | "sideways",
-    volatility20: number | null
-  ): string {
-    const rsiPart = rsi14 === null ? "RSI unavailable" : `RSI ${rsi14.toFixed(2)}`;
-    const volPart = volatility20 === null ? "volatility unavailable" : `volatility ${volatility20.toFixed(2)}%`;
-
-    return `Current read is ${stance} with ${trend}; ${rsiPart} and ${volPart}.`;
-  }
 }

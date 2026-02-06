@@ -6,6 +6,18 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4
 const DEFAULT_TIMEFRAME = "1d";
 const DEFAULT_LIMIT = 120;
 const SYMBOL_STOPWORDS = new Set(["RSI", "EMA", "SMA", "MACD", "OHLCV", "VWAP", "ATR", "ADX", "ROC"]);
+const COMPANY_SYMBOL_MAP = {
+  TESLA: "TSLA",
+  APPLE: "AAPL",
+  MICROSOFT: "MSFT",
+  NVIDIA: "NVDA",
+  AMAZON: "AMZN",
+  META: "META",
+  FACEBOOK: "META",
+  NETFLIX: "NFLX",
+  GOOGLE: "GOOGL",
+  ALPHABET: "GOOGL"
+};
 
 function buildUrl(path, params) {
   const url = new URL(path, API_BASE_URL);
@@ -63,6 +75,14 @@ const backendApi = {
 function extractSymbol(text) {
   if (!text) {
     return null;
+  }
+
+  const upperText = text.toUpperCase();
+  for (const [name, symbol] of Object.entries(COMPANY_SYMBOL_MAP)) {
+    const pattern = new RegExp(`\\b${name}\\b`, "i");
+    if (pattern.test(upperText)) {
+      return symbol;
+    }
   }
 
   const dollarMatch = text.match(/\$([A-Za-z]{1,5})\b/);
@@ -455,7 +475,7 @@ function Thread({ messages, analysis, snapshot, candles, loadingAction, error, o
                 <h3>Analysis</h3>
                 <span className="badge">{analysis.symbol}</span>
               </div>
-              <p className="summaryText">{analysis.summary}</p>
+              {/* <p className="summaryText">{analysis.llmSummary ?? "Summary unavailable right now."}</p> */}
               <div className="metricGrid">
                 <div className="metric">
                   <span>Stance</span>
@@ -546,6 +566,16 @@ function Thread({ messages, analysis, snapshot, candles, loadingAction, error, o
                   </div>
                 ))}
             </div>
+          </article>
+
+          <article className="dataCard dataCard--wide">
+            <div className="dataCard__head">
+              <h3>Summary</h3>
+              <span className="mutedText">
+                {analysis.summarySource === "groq" ? "Groq-assisted" : "Unavailable"}
+              </span>
+            </div>
+            <p className="summaryText">{analysis.llmSummary ?? "Summary unavailable right now."}</p>
           </article>
         </section>
       ) : null}
@@ -772,7 +802,7 @@ export default function HomePage() {
 
     try {
       const result = await loadAllForSymbol(symbol, prompt);
-      pushMessage("bot", result.summary);
+      // pushMessage("bot", result.llmSummary ?? "Summary unavailable right now.");
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : "Could not complete analyze request";
       setError(message);
