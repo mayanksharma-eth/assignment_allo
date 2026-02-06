@@ -470,6 +470,10 @@ function Thread({ messages, analysis, snapshot, candles, loadingAction, error, o
                   <strong>{analysis.timeframe}</strong>
                 </div>
                 <div className="metric">
+                  <span>Last price</span>
+                  <strong>{numberFormat(analysis.latestCandle?.close)}</strong>
+                </div>
+                <div className="metric">
                   <span>Latest close</span>
                   <strong>{numberFormat(analysis.indicators?.latestClose)}</strong>
                 </div>
