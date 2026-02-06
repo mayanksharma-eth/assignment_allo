@@ -1,6 +1,56 @@
 import { Injectable } from "@nestjs/common";
 
 const SYMBOL_STOPWORDS = new Set(["RSI", "EMA", "SMA", "MACD", "OHLCV", "VWAP", "ATR", "ADX", "ROC"]);
+const SYMBOL_HINT_STOPWORDS = new Set([
+  "STOCK",
+  "STOCKS",
+  "SHARE",
+  "SHARES",
+  "CRYPTO",
+  "COIN",
+  "TOKEN",
+  "MARKET",
+  "PRICE",
+  "QUOTE",
+  "FORECAST",
+  "OUTLOOK",
+  "TREND",
+  "RSI",
+  "VOLATILITY",
+  "CHART",
+  "SNAPSHOT",
+  "ANALYSIS",
+  "ANALYZE",
+  "REVIEW",
+  "CHECK",
+  "LOOK",
+  "SHOW",
+  "GIVE",
+  "WHAT",
+  "ABOUT",
+  "WITH",
+  "FOR",
+  "ON",
+  "OF",
+  "TODAY",
+  "NOW",
+  "LATEST",
+  "PLEASE",
+  "BUY",
+  "SELL",
+  "HOLD",
+  "ENTRY",
+  "EXIT",
+  "TARGET",
+  "PREDICT",
+  "PREDICTION",
+  "THOUGHTS",
+  "OPINION",
+  "ADVICE",
+  "HELP",
+  "ETF",
+  "ETFs"
+]);
 const COMPANY_SYMBOL_MAP: Record<string, string> = {
   TESLA: "TSLA",
   APPLE: "AAPL",
@@ -147,6 +197,24 @@ export class NlpService {
   private resolveSymbol(prompt?: string): string | null {
     if (!prompt) {
       return null;
+    }
+
+    const intentMatch = prompt.match(
+      /\b(?:review|analyze|analysis|check|look\s+at|look\s+into|thoughts\s+on|thoughts\s+about|what\s+about|whats?\s+up\s+with|tell\s+me\s+about|show\s+me|give\s+me|price|quote|forecast|outlook|trend|rsi|volatility|chart|snapshot|buy|sell|hold|entry|exit|target)\s+(?:of|for|on|about)?\s*([A-Za-z]{1,6})\b/i
+    );
+    if (intentMatch) {
+      const candidate = intentMatch[1].toUpperCase();
+      if (!SYMBOL_STOPWORDS.has(candidate) && !SYMBOL_HINT_STOPWORDS.has(candidate)) {
+        return candidate;
+      }
+    }
+
+    const nounMatch = prompt.match(/\b([A-Za-z]{1,6})\s+(?:stock|stocks|share|shares|ticker|token|coin|etf|etfs)\b/i);
+    if (nounMatch) {
+      const candidate = nounMatch[1].toUpperCase();
+      if (!SYMBOL_STOPWORDS.has(candidate) && !SYMBOL_HINT_STOPWORDS.has(candidate)) {
+        return candidate;
+      }
     }
 
     const upperPrompt = prompt.toUpperCase();

@@ -6,6 +6,56 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4
 const DEFAULT_TIMEFRAME = "1d";
 const DEFAULT_LIMIT = 120;
 const SYMBOL_STOPWORDS = new Set(["RSI", "EMA", "SMA", "MACD", "OHLCV", "VWAP", "ATR", "ADX", "ROC"]);
+const SYMBOL_HINT_STOPWORDS = new Set([
+  "STOCK",
+  "STOCKS",
+  "SHARE",
+  "SHARES",
+  "CRYPTO",
+  "COIN",
+  "TOKEN",
+  "MARKET",
+  "PRICE",
+  "QUOTE",
+  "FORECAST",
+  "OUTLOOK",
+  "TREND",
+  "RSI",
+  "VOLATILITY",
+  "CHART",
+  "SNAPSHOT",
+  "ANALYSIS",
+  "ANALYZE",
+  "REVIEW",
+  "CHECK",
+  "LOOK",
+  "SHOW",
+  "GIVE",
+  "WHAT",
+  "ABOUT",
+  "WITH",
+  "FOR",
+  "ON",
+  "OF",
+  "TODAY",
+  "NOW",
+  "LATEST",
+  "PLEASE",
+  "BUY",
+  "SELL",
+  "HOLD",
+  "ENTRY",
+  "EXIT",
+  "TARGET",
+  "PREDICT",
+  "PREDICTION",
+  "THOUGHTS",
+  "OPINION",
+  "ADVICE",
+  "HELP",
+  "ETF",
+  "ETFS"
+]);
 const COMPANY_SYMBOL_MAP = {
   TESLA: "TSLA",
   APPLE: "AAPL",
@@ -76,6 +126,24 @@ const backendApi = {
 function extractSymbol(text) {
   if (!text) {
     return null;
+  }
+
+  const intentMatch = text.match(
+    /\b(?:review|analyze|analysis|check|look\s+at|look\s+into|thoughts\s+on|thoughts\s+about|what\s+about|whats?\s+up\s+with|tell\s+me\s+about|show\s+me|give\s+me|price|quote|forecast|outlook|trend|rsi|volatility|chart|snapshot|buy|sell|hold|entry|exit|target)\s+(?:of|for|on|about)?\s*([A-Za-z]{1,6})\b/i
+  );
+  if (intentMatch) {
+    const candidate = intentMatch[1].toUpperCase();
+    if (!SYMBOL_STOPWORDS.has(candidate) && !SYMBOL_HINT_STOPWORDS.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  const nounMatch = text.match(/\b([A-Za-z]{1,6})\s+(?:stock|stocks|share|shares|ticker|token|coin|etf|etfs)\b/i);
+  if (nounMatch) {
+    const candidate = nounMatch[1].toUpperCase();
+    if (!SYMBOL_STOPWORDS.has(candidate) && !SYMBOL_HINT_STOPWORDS.has(candidate)) {
+      return candidate;
+    }
   }
 
   const pairMatch = text.match(/\b([A-Z0-9]{2,10})\/(USD)\b/i);
