@@ -935,6 +935,70 @@ body.theme-dark .statusCard--error {
   color: #4f4f4f;
 }
 
+.forecastBlock + .forecastBlock {
+  margin-top: 14px;
+}
+
+.forecastTitle {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #676767;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+.forecastTableWrap {
+  border: 1px solid #efe3da;
+  border-radius: 10px;
+  overflow: auto;
+}
+
+.forecastTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+  font-size: 12px;
+}
+
+.forecastTable th,
+.forecastTable td {
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.forecastTable thead th {
+  background: #f9f3ef;
+  color: #6b6b6b;
+  font-weight: 650;
+  border-bottom: 1px solid #efe3da;
+}
+
+.forecastTable tbody td {
+  border-top: 1px solid #f4e9e1;
+  color: #454545;
+}
+
+body.theme-dark .forecastTitle {
+  color: var(--muted);
+}
+
+body.theme-dark .forecastTableWrap {
+  border-color: #2b3445;
+  background: #151b26;
+}
+
+body.theme-dark .forecastTable thead th {
+  background: #1a2231;
+  color: var(--muted);
+  border-bottom-color: #2b3445;
+}
+
+body.theme-dark .forecastTable tbody td {
+  border-top-color: #2b3445;
+  color: var(--text);
+}
+
 @media (max-width: 900px) {
   .sidebar {
     width: 260px;

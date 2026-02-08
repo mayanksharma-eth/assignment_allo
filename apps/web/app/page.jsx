@@ -54,7 +54,15 @@ const SYMBOL_HINT_STOPWORDS = new Set([
   "ADVICE",
   "HELP",
   "ETF",
-  "ETFS"
+  "ETFS",
+  "THE",
+  "THIS",
+  "THAT",
+  "MY",
+  "YOUR",
+  "OUR",
+  "A",
+  "AN"
 ]);
 const COMPANY_SYMBOL_MAP = {
   TESLA: "TSLA",
@@ -67,7 +75,10 @@ const COMPANY_SYMBOL_MAP = {
   NETFLIX: "NFLX",
   GOOGLE: "GOOGL",
   ALPHABET: "GOOGL",
-  BITCOIN: "BTC"
+  BITCOIN: "BTC",
+  ETHEREUM: "ETH",
+  SOLANA: "SOL",
+  DOGECOIN: "DOGE"
 };
 
 function buildUrl(path, params) {
@@ -123,39 +134,7 @@ const backendApi = {
     })
 };
 
-function extractSymbol(text) {
-  if (!text) {
-    return null;
-  }
-
-  const intentMatch = text.match(
-    /\b(?:review|analyze|analysis|check|look\s+at|look\s+into|thoughts\s+on|thoughts\s+about|what\s+about|whats?\s+up\s+with|tell\s+me\s+about|show\s+me|give\s+me|price|quote|forecast|outlook|trend|rsi|volatility|chart|snapshot|buy|sell|hold|entry|exit|target)\s+(?:of|for|on|about)?\s*([A-Za-z]{1,6})\b/i
-  );
-  if (intentMatch) {
-    const candidate = intentMatch[1].toUpperCase();
-    if (!SYMBOL_STOPWORDS.has(candidate) && !SYMBOL_HINT_STOPWORDS.has(candidate)) {
-      return candidate;
-    }
-  }
-
-  const nounMatch = text.match(/\b([A-Za-z]{1,6})\s+(?:stock|stocks|share|shares|ticker|token|coin|etf|etfs)\b/i);
-  if (nounMatch) {
-    const candidate = nounMatch[1].toUpperCase();
-    if (!SYMBOL_STOPWORDS.has(candidate) && !SYMBOL_HINT_STOPWORDS.has(candidate)) {
-      return candidate;
-    }
-  }
-
-  const pairMatch = text.match(/\b([A-Z0-9]{2,10})\/(USD)\b/i);
-  if (pairMatch) {
-    return `${pairMatch[1].toUpperCase()}/${pairMatch[2].toUpperCase()}`;
-  }
-
-  const compactPair = text.match(/\b([A-Z0-9]{2,10})USD\b/i);
-  if (compactPair) {
-    return `${compactPair[1].toUpperCase()}/USD`;
-  }
-
+function resolveMappedName(text) {
   const upperText = text.toUpperCase();
   for (const [name, symbol] of Object.entries(COMPANY_SYMBOL_MAP)) {
     const pattern = new RegExp(`\\b${name}\\b`, "i");
@@ -164,25 +143,91 @@ function extractSymbol(text) {
     }
   }
 
-  const dollarMatch = text.match(/\$([A-Za-z]{1,5})\b/);
-  if (dollarMatch) {
-    return dollarMatch[1].toUpperCase();
+  return null;
+}
+
+function normalizeSymbolCandidate(rawCandidate) {
+  if (!rawCandidate) {
+    return null;
   }
 
-  const tokens = Array.from(text.matchAll(/\b[A-Z]{1,5}\b/g)).map((match) => match[0]);
-  const filtered = tokens.filter((token) => !SYMBOL_STOPWORDS.has(token));
+  const candidate = rawCandidate.trim().toUpperCase();
+  if (!candidate || SYMBOL_STOPWORDS.has(candidate) || SYMBOL_HINT_STOPWORDS.has(candidate)) {
+    return null;
+  }
+
+  if (/^[A-Z0-9]{1,6}$/.test(candidate)) {
+    return candidate;
+  }
+
+  if (/^[A-Z0-9]{2,10}\/USD$/.test(candidate)) {
+    return candidate;
+  }
+
+  if (/^[A-Z0-9]{2,10}USD$/.test(candidate)) {
+    return `${candidate.slice(0, -3)}/USD`;
+  }
+
+  return null;
+}
+
+function extractSymbol(text) {
+  if (!text) {
+    return null;
+  }
+
+  const pairMatch = text.match(/\b([A-Za-z0-9]{2,10})\/(USD)\b/i);
+  if (pairMatch) {
+    return `${pairMatch[1].toUpperCase()}/${pairMatch[2].toUpperCase()}`;
+  }
+
+  const compactPair = text.match(/\b([A-Za-z0-9]{2,10})USD\b/i);
+  if (compactPair) {
+    return `${compactPair[1].toUpperCase()}/USD`;
+  }
+
+  const mappedName = resolveMappedName(text);
+  if (mappedName) {
+    return mappedName;
+  }
+
+  const intentMatch = text.match(
+    /\b(?:review|analyze|analysis|predict|prediction|check|look\s+at|look\s+into|thoughts\s+on|thoughts\s+about|what\s+about|whats?\s+up\s+with|tell\s+me\s+about|show\s+me|give\s+me|price|quote|forecast|outlook|trend|rsi|volatility|chart|snapshot|buy|sell|hold|entry|exit|target)\s+(?:of|for|on|about)?\s*(?:the\s+)?([A-Za-z0-9/]{1,10})\b/i
+  );
+  if (intentMatch) {
+    const candidate = normalizeSymbolCandidate(intentMatch[1]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  const nounMatch = text.match(/\b([A-Za-z0-9/]{1,10})\s+(?:stock|stocks|share|shares|ticker|token|coin|etf|etfs)\b/i);
+  if (nounMatch) {
+    const candidate = normalizeSymbolCandidate(nounMatch[1]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  const dollarMatch = text.match(/\$([A-Za-z]{1,6})\b/);
+  if (dollarMatch) {
+    const candidate = normalizeSymbolCandidate(dollarMatch[1]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  const tokens = Array.from(text.matchAll(/\b[A-Z]{1,6}\b/g)).map((match) => match[0]);
+  const filtered = tokens
+    .map((token) => normalizeSymbolCandidate(token))
+    .filter((token) => Boolean(token));
   if (filtered.length) {
     return filtered[filtered.length - 1];
   }
 
-  if (tokens.length) {
-    return tokens[tokens.length - 1];
-  }
-
-  const wordMatch = text.match(/\b(?:for|of|on|about)\s+([A-Za-z]{1,5})\b/i);
+  const wordMatch = text.match(/\b(?:for|of|on|about)\s+(?:the\s+)?([A-Za-z0-9/]{1,10})\b/i);
   if (wordMatch) {
-    const candidate = wordMatch[1].toUpperCase();
-    return SYMBOL_STOPWORDS.has(candidate) ? null : candidate;
+    return normalizeSymbolCandidate(wordMatch[1]);
   }
 
   return null;
@@ -205,6 +250,26 @@ function toPercent(value) {
 
   const sign = value > 0 ? "+" : "";
   return `${sign}${Number(value).toFixed(2)}%`;
+}
+
+function usdCompact(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "—";
+  }
+
+  const numeric = Number(value);
+  const abs = Math.abs(numeric);
+  if (abs >= 1_000_000_000) {
+    return `$${(numeric / 1_000_000_000).toFixed(2)}B`;
+  }
+  if (abs >= 1_000_000) {
+    return `$${(numeric / 1_000_000).toFixed(2)}M`;
+  }
+  if (abs >= 1_000) {
+    return `$${(numeric / 1_000).toFixed(1)}K`;
+  }
+
+  return `$${numberFormat(numeric)}`;
 }
 
 function Icon({ children, size = 18 }) {
@@ -531,6 +596,109 @@ function PriceChart({ candles }) {
   );
 }
 
+function ForecastTables({ forecast }) {
+  const outlookRows = Array.isArray(forecast?.outlook) ? forecast.outlook : [];
+  const levelsRows = Array.isArray(forecast?.keyLevelsTimeline) ? forecast.keyLevelsTimeline : [];
+  const catalystRows = Array.isArray(forecast?.annualCatalystBreakdown) ? forecast.annualCatalystBreakdown : [];
+
+  if (!outlookRows.length) {
+    return null;
+  }
+
+  return (
+    <article className="dataCard dataCard--wide">
+      <div className="dataCard__head">
+        <h3>Multi-Year Prediction</h3>
+        <span className="mutedText">
+          {forecast.fromYear} - {forecast.toYear}
+        </span>
+      </div>
+
+      <p className="summaryText">{forecast.methodology}</p>
+
+      <div className="forecastBlock">
+        <h4 className="forecastTitle">Price Outlook</h4>
+        <div className="forecastTableWrap">
+          <table className="forecastTable">
+            <thead>
+              <tr>
+                <th>Year</th>
+                <th>Price Range</th>
+                <th>Catalysts</th>
+                <th>Probability</th>
+              </tr>
+            </thead>
+            <tbody>
+              {outlookRows.map((row) => (
+                <tr key={`outlook-${row.year}`}>
+                  <td>{row.year}</td>
+                  <td>
+                    {usdCompact(row.priceRangeLow)} - {usdCompact(row.priceRangeHigh)}
+                  </td>
+                  <td>{row.catalysts}</td>
+                  <td>{row.probability}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="forecastBlock">
+        <h4 className="forecastTitle">Key Levels Timeline</h4>
+        <div className="forecastTableWrap">
+          <table className="forecastTable">
+            <thead>
+              <tr>
+                <th>Year</th>
+                <th>Support</th>
+                <th>Resistance</th>
+                <th>Invalidation</th>
+              </tr>
+            </thead>
+            <tbody>
+              {levelsRows.map((row) => (
+                <tr key={`levels-${row.year}`}>
+                  <td>{row.year}</td>
+                  <td>{usdCompact(row.support)}</td>
+                  <td>{usdCompact(row.resistance)}</td>
+                  <td>{usdCompact(row.invalidation)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="forecastBlock">
+        <h4 className="forecastTitle">Annual Catalyst Breakdown</h4>
+        <div className="forecastTableWrap">
+          <table className="forecastTable">
+            <thead>
+              <tr>
+                <th>Year</th>
+                <th>Macro</th>
+                <th>Technical</th>
+                <th>Adoption</th>
+              </tr>
+            </thead>
+            <tbody>
+              {catalystRows.map((row) => (
+                <tr key={`catalyst-${row.year}`}>
+                  <td>{row.year}</td>
+                  <td>{row.macro}</td>
+                  <td>{row.technical}</td>
+                  <td>{row.adoption}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function Thread({ messages, analysis, snapshot, candles, loadingAction, error, onRefreshAll }) {
   return (
     <div className={`thread ${messages.length ? "thread--visible" : ""}`} aria-live="polite">
@@ -647,6 +815,8 @@ function Thread({ messages, analysis, snapshot, candles, loadingAction, error, o
             </div>
           </article>
 
+          {analysis.forecast ? <ForecastTables forecast={analysis.forecast} /> : null}
+
           <article className="dataCard dataCard--wide">
             <div className="dataCard__head">
               <h3>Summary</h3>
@@ -727,7 +897,7 @@ function Composer({
           <input
             className="composer__input"
             type="text"
-            placeholder="Try: analyze AAPL, snapshot TSLA, chart NVDA..."
+            placeholder="Try: analyze AAPL, snapshot TSLA, predict BTC next 3 years..."
             value={value}
             onChange={(event) => onChange(event.target.value)}
             onKeyDown={(event) => {
@@ -801,7 +971,8 @@ export default function HomePage() {
       "Load OHLCV chart for NVDA",
       "Analyze MSFT for trend and risk",
       "Check RSI and volatility for AMZN",
-      "Analyze META with bullish/bearish view"
+      "Analyze META with bullish/bearish view",
+      "Predict BTC for next 3 years"
     ];
 
     const items = base.slice();

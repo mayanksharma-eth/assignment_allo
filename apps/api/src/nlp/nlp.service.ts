@@ -49,7 +49,15 @@ const SYMBOL_HINT_STOPWORDS = new Set([
   "ADVICE",
   "HELP",
   "ETF",
-  "ETFs"
+  "ETFS",
+  "THE",
+  "THIS",
+  "THAT",
+  "MY",
+  "YOUR",
+  "OUR",
+  "A",
+  "AN"
 ]);
 const COMPANY_SYMBOL_MAP: Record<string, string> = {
   TESLA: "TSLA",
@@ -62,14 +70,18 @@ const COMPANY_SYMBOL_MAP: Record<string, string> = {
   NETFLIX: "NFLX",
   GOOGLE: "GOOGL",
   ALPHABET: "GOOGL",
-  BITCOIN: "BTC"
+  BITCOIN: "BTC",
+  ETHEREUM: "ETH",
+  SOLANA: "SOL",
+  DOGECOIN: "DOGE"
 };
 
 type NlpIntent = {
   symbol: string | null;
   timeframe: "1h" | "4h" | "1d" | null;
   limit: number | null;
-  action: "analyze" | "snapshot" | "ohlcv" | null;
+  action: "analyze" | "snapshot" | "ohlcv" | "forecast" | null;
+  horizonYears: number | null;
   confidence: number;
 };
 
@@ -145,11 +157,12 @@ export class NlpService {
     const parsed = payload ?? {};
     const symbol = typeof parsed.symbol === "string" ? parsed.symbol.toUpperCase() : null;
     const timeframe = ["1h", "4h", "1d"].includes(parsed.timeframe) ? parsed.timeframe : null;
-    const action = ["analyze", "snapshot", "ohlcv"].includes(parsed.action) ? parsed.action : null;
+    const action = ["analyze", "snapshot", "ohlcv", "forecast"].includes(parsed.action) ? parsed.action : null;
     const limit = Number.isFinite(parsed.limit) ? Number(parsed.limit) : null;
+    const horizonYears = this.normalizeHorizonYears(parsed.horizonYears);
     const confidence = typeof parsed.confidence === "number" ? parsed.confidence : 0.5;
 
-    if (!symbol && !timeframe && !action && !limit) {
+    if (!symbol && !timeframe && !action && !limit && !horizonYears) {
       return null;
     }
 
@@ -158,6 +171,7 @@ export class NlpService {
       timeframe,
       limit,
       action,
+      horizonYears,
       confidence
     };
   }
@@ -184,12 +198,14 @@ export class NlpService {
     const action = this.resolveAction(prompt);
     const timeframe = this.resolveTimeframe(prompt);
     const limit = this.resolveLimit(prompt);
+    const horizonYears = this.resolveHorizonYears(prompt, action);
 
     return {
       symbol,
       timeframe,
       limit,
       action,
+      horizonYears,
       confidence: 0.4
     };
   }
@@ -199,24 +215,64 @@ export class NlpService {
       return null;
     }
 
+    const pairMatch = prompt.match(/\b([A-Za-z0-9]{2,10})\/(USD)\b/i);
+    if (pairMatch) {
+      return `${pairMatch[1].toUpperCase()}/${pairMatch[2].toUpperCase()}`;
+    }
+
+    const compactPair = prompt.match(/\b([A-Za-z0-9]{2,10})USD\b/i);
+    if (compactPair) {
+      return `${compactPair[1].toUpperCase()}/USD`;
+    }
+
+    const mappedName = this.resolveMappedName(prompt);
+    if (mappedName) {
+      return mappedName;
+    }
+
     const intentMatch = prompt.match(
-      /\b(?:review|analyze|analysis|check|look\s+at|look\s+into|thoughts\s+on|thoughts\s+about|what\s+about|whats?\s+up\s+with|tell\s+me\s+about|show\s+me|give\s+me|price|quote|forecast|outlook|trend|rsi|volatility|chart|snapshot|buy|sell|hold|entry|exit|target)\s+(?:of|for|on|about)?\s*([A-Za-z]{1,6})\b/i
+      /\b(?:review|analyze|analysis|predict|prediction|check|look\s+at|look\s+into|thoughts\s+on|thoughts\s+about|what\s+about|whats?\s+up\s+with|tell\s+me\s+about|show\s+me|give\s+me|price|quote|forecast|outlook|trend|rsi|volatility|chart|snapshot|buy|sell|hold|entry|exit|target)\s+(?:of|for|on|about)?\s*(?:the\s+)?([A-Za-z0-9/]{1,10})\b/i
     );
     if (intentMatch) {
-      const candidate = intentMatch[1].toUpperCase();
-      if (!SYMBOL_STOPWORDS.has(candidate) && !SYMBOL_HINT_STOPWORDS.has(candidate)) {
+      const candidate = this.normalizeSymbolCandidate(intentMatch[1]);
+      if (candidate) {
         return candidate;
       }
     }
 
-    const nounMatch = prompt.match(/\b([A-Za-z]{1,6})\s+(?:stock|stocks|share|shares|ticker|token|coin|etf|etfs)\b/i);
+    const nounMatch = prompt.match(/\b([A-Za-z0-9/]{1,10})\s+(?:stock|stocks|share|shares|ticker|token|coin|etf|etfs)\b/i);
     if (nounMatch) {
-      const candidate = nounMatch[1].toUpperCase();
-      if (!SYMBOL_STOPWORDS.has(candidate) && !SYMBOL_HINT_STOPWORDS.has(candidate)) {
+      const candidate = this.normalizeSymbolCandidate(nounMatch[1]);
+      if (candidate) {
         return candidate;
       }
     }
 
+    const dollarMatch = prompt.match(/\$([A-Za-z]{1,6})\b/);
+    if (dollarMatch) {
+      const candidate = this.normalizeSymbolCandidate(dollarMatch[1]);
+      if (candidate) {
+        return candidate;
+      }
+    }
+
+    const tokens = Array.from(prompt.matchAll(/\b[A-Z]{1,6}\b/g)).map((match) => match[0]);
+    const filtered = tokens
+      .map((token) => this.normalizeSymbolCandidate(token))
+      .filter((token): token is string => Boolean(token));
+    if (filtered.length) {
+      return filtered[filtered.length - 1];
+    }
+
+    const wordMatch = prompt.match(/\b(?:for|of|on|about)\s+(?:the\s+)?([A-Za-z0-9/]{1,10})\b/i);
+    if (wordMatch) {
+      return this.normalizeSymbolCandidate(wordMatch[1]);
+    }
+
+    return null;
+  }
+
+  private resolveMappedName(prompt: string): string | null {
     const upperPrompt = prompt.toUpperCase();
     for (const [name, mapped] of Object.entries(COMPANY_SYMBOL_MAP)) {
       const pattern = new RegExp(`\\b${name}\\b`, "i");
@@ -225,25 +281,29 @@ export class NlpService {
       }
     }
 
-    const dollarMatch = prompt.match(/\$([A-Za-z]{1,5})\b/);
-    if (dollarMatch) {
-      return dollarMatch[1].toUpperCase();
+    return null;
+  }
+
+  private normalizeSymbolCandidate(rawCandidate?: string): string | null {
+    if (!rawCandidate) {
+      return null;
     }
 
-    const tokens = Array.from(prompt.matchAll(/\b[A-Z]{1,5}\b/g)).map((match) => match[0]);
-    const filtered = tokens.filter((token) => !SYMBOL_STOPWORDS.has(token));
-    if (filtered.length) {
-      return filtered[filtered.length - 1];
+    const candidate = rawCandidate.trim().toUpperCase();
+    if (!candidate || SYMBOL_STOPWORDS.has(candidate) || SYMBOL_HINT_STOPWORDS.has(candidate)) {
+      return null;
     }
 
-    if (tokens.length) {
-      return tokens[tokens.length - 1];
+    if (/^[A-Z0-9]{1,6}$/.test(candidate)) {
+      return candidate;
     }
 
-    const wordMatch = prompt.match(/\b(?:for|of|on|about)\s+([A-Za-z]{1,5})\b/i);
-    if (wordMatch) {
-      const candidate = wordMatch[1].toUpperCase();
-      return SYMBOL_STOPWORDS.has(candidate) ? null : candidate;
+    if (/^[A-Z0-9]{2,10}\/USD$/.test(candidate)) {
+      return candidate;
+    }
+
+    if (/^[A-Z0-9]{2,10}USD$/.test(candidate)) {
+      return `${candidate.slice(0, -3)}/USD`;
     }
 
     return null;
@@ -255,6 +315,17 @@ export class NlpService {
     }
 
     const lower = prompt.toLowerCase();
+    if (
+      lower.includes("predict") ||
+      lower.includes("prediction") ||
+      lower.includes("forecast") ||
+      lower.includes("outlook") ||
+      lower.includes("next year") ||
+      lower.includes("next-year")
+    ) {
+      return "forecast";
+    }
+
     if (lower.includes("chart") || lower.includes("ohlcv")) {
       return "ohlcv";
     }
@@ -263,6 +334,45 @@ export class NlpService {
     }
 
     return "analyze";
+  }
+
+  private resolveHorizonYears(prompt?: string, action?: NlpIntent["action"]): number | null {
+    if (!prompt) {
+      return action === "forecast" ? 3 : null;
+    }
+
+    const explicitNextYears = prompt.match(/\bnext\s+(\d{1,2})\s+years?\b/i);
+    if (explicitNextYears) {
+      return this.normalizeHorizonYears(explicitNextYears[1]);
+    }
+
+    const explicitYears = prompt.match(/\b(\d{1,2})\s*[- ]?years?\b/i);
+    if (explicitYears) {
+      return this.normalizeHorizonYears(explicitYears[1]);
+    }
+
+    const isForecastPrompt =
+      action === "forecast" ||
+      /\b(predict|prediction|forecast|outlook|long[- ]term|multi[- ]year)\b/i.test(prompt);
+    if (isForecastPrompt) {
+      return 3;
+    }
+
+    return null;
+  }
+
+  private normalizeHorizonYears(raw: unknown): number | null {
+    const parsed = typeof raw === "number" ? raw : Number.parseInt(String(raw ?? ""), 10);
+    if (!Number.isFinite(parsed)) {
+      return null;
+    }
+
+    const rounded = Math.floor(parsed);
+    if (rounded < 1) {
+      return null;
+    }
+
+    return Math.min(8, rounded);
   }
 
   private resolveTimeframe(prompt?: string): NlpIntent["timeframe"] {
@@ -359,7 +469,7 @@ export class NlpService {
           {
             role: "system",
             content:
-              "Extract intent from the user prompt. Return JSON only with keys: symbol, timeframe, limit, action, confidence. Map company names to tickers (Tesla->TSLA, Apple->AAPL, Microsoft->MSFT, Nvidia->NVDA, Amazon->AMZN, Meta/Facebook->META, Netflix->NFLX, Google/Alphabet->GOOGL). For crypto, return the pair in USD format (BTC/USD, ETH/USD, SOL/USD, DOGE/USD). If you infer another coin, still return TICKER/USD. Timeframe must be 1h, 4h, or 1d or null. Action must be analyze, snapshot, ohlcv, or null."
+              "Extract intent from the user prompt. Return JSON only with keys: symbol, timeframe, limit, action, horizonYears, confidence. Map company names to tickers (Tesla->TSLA, Apple->AAPL, Microsoft->MSFT, Nvidia->NVDA, Amazon->AMZN, Meta/Facebook->META, Netflix->NFLX, Google/Alphabet->GOOGL). For crypto, return the pair in USD format (BTC/USD, ETH/USD, SOL/USD, DOGE/USD). If you infer another coin, still return TICKER/USD. Timeframe must be 1h, 4h, or 1d or null. Action must be analyze, snapshot, ohlcv, forecast, or null. horizonYears must be integer or null."
           },
           { role: "user", content: prompt }
         ]

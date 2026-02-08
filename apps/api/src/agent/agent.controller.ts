@@ -9,6 +9,7 @@ type AnalyzeBody = {
   timeframe?: string;
   limit?: number;
   prompt?: string;
+  forecastYears?: number;
 };
 
 @Controller("agent")
@@ -30,8 +31,10 @@ export class AgentController {
     const request: AgentAnalyzeRequest = {
       symbol,
       prompt,
+      action: intent?.action ?? undefined,
       timeframe: this.parseTimeframe(body.timeframe) ?? intent?.timeframe ?? undefined,
-      limit: this.parseLimit(body.limit) ?? intent?.limit ?? undefined
+      limit: this.parseLimit(body.limit) ?? intent?.limit ?? undefined,
+      forecastYears: this.parseForecastYears(body.forecastYears) ?? intent?.horizonYears ?? undefined
     };
 
     return this.agentService.analyze(request);
@@ -59,5 +62,22 @@ export class AgentController {
     }
 
     return limit;
+  }
+
+  private parseForecastYears(forecastYears?: number): number | undefined {
+    if (forecastYears === undefined || forecastYears === null) {
+      return undefined;
+    }
+
+    if (!Number.isFinite(forecastYears)) {
+      throw new BadRequestException("forecastYears must be a valid number");
+    }
+
+    const normalized = Math.floor(forecastYears);
+    if (normalized < 1 || normalized > 8) {
+      throw new BadRequestException("forecastYears must be between 1 and 8");
+    }
+
+    return normalized;
   }
 }
